@@ -1,0 +1,31 @@
+# Muhit sozlamalari (token va parollar)
+.env
+
+# Virtual muhit
+.venv/
+venv/
+env/
+
+# Python kesh
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Yuklangan fayllar
+uploads/
+
+# Ma'lumotlar bazasi
+*.db
+*.sqlite3
+
+# IDE fayllar
+.idea/
+.vscode/
+*.swp
+
+# Log fayllar
+*.log
+
+# OS fayllar
+.DS_Store
+Thumbs.db
