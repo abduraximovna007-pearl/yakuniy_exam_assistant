@@ -16,10 +16,17 @@ async def create_user(telegram_id: int, full_name: str, faculty: str, group_name
         return user
 
 async def check_test_exists(title: str) -> Test | None:
+    # Kengaytmani olib tashlash (Dinshunoslik.docx -> Dinshunoslik)
+    clean_title = title.replace('.docx', '').replace('.txt', '').strip()
     async with async_session() as session:
-        return await session.scalar(
-            select(Test).where(Test.title == title, Test.status == 'approved')
+        # Kengaytmasiz va kengaytmali ikkalasini ham tekshirish
+        result = await session.scalar(
+            select(Test).where(
+                Test.status == 'approved',
+                Test.title.in_([clean_title, clean_title + '.docx', clean_title + '.txt'])
+            )
         )
+        return result
 
 async def create_test(title: str, price: int, uploaded_by: int, file_path: str = "") -> Test:
     async with async_session() as session:

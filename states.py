@@ -11,3 +11,6 @@ class UploadState(StatesGroup):
 
 class TestState(StatesGroup):
     answering = State()
+
+class AdminCardState(StatesGroup):
+    waiting_for_card = State()

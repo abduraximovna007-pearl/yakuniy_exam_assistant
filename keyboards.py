@@ -21,6 +21,9 @@ def admin_confirm_keyboard(test_id: int, user_id: int):
             [
                 InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"confirm_{test_id}_{user_id}"),
                 InlineKeyboardButton(text="❌ Rad etish", callback_data=f"reject_{test_id}_{user_id}"),
+            ],
+            [
+                InlineKeyboardButton(text="💳 Karta raqami yuborish", callback_data=f"send_card_{test_id}_{user_id}"),
             ]
         ]
     )
