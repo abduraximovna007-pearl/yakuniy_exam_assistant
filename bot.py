@@ -13,8 +13,9 @@ logging.basicConfig(level=logging.INFO)
 
 # Render.com avtomatik PORT va RENDER_EXTERNAL_URL beradi
 PORT = int(os.environ.get("PORT", 8080))
-WEBHOOK_HOST = (os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("WEBHOOK_URL") or "").rstrip("/")
-WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}" if BOT_TOKEN else "/webhook"
+DEFAULT_WEBHOOK = "https://yakuniy-exam-assistant.onrender.com"
+WEBHOOK_HOST = (os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("WEBHOOK_URL") or DEFAULT_WEBHOOK).rstrip("/")
+WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
 
 
 async def on_startup(bot: Bot):
@@ -24,12 +25,11 @@ async def on_startup(bot: Bot):
         await bot.set_webhook(webhook_url, drop_pending_updates=True)
         logging.info(f"Webhook set: {webhook_url}")
     else:
-        logging.info("Webhook o'rnatilmadi (WEBHOOK_HOST yoki BOT_TOKEN yo'q)")
+        logging.info("Webhook o'rnatilmadi")
 
 
 async def on_shutdown(bot: Bot):
-    if WEBHOOK_HOST:
-        await bot.delete_webhook()
+    logging.info("Bot shutting down...")
 
 
 def create_app() -> web.Application:
