@@ -44,25 +44,30 @@ async def explain_wrong_answer(
             f"2. Nima uchun '{correct_answer}' varianti to'g'ri\n\n"
             "Faqat tushuntirishni yozing, boshqa hech narsa qo'shmang."
         )
-        import time
-        max_retries = 3
-        for attempt in range(max_retries):
+        
+        # Google API da yuklama bo'lganda navbat bilan tekshirish uchun modellar
+        models_to_try = [
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash-lite",
+            "gemini-3.7-flash"
+        ]
+        
+        for model_name in models_to_try:
             try:
                 client = _get_client()
                 response = client.models.generate_content(
-                    model="gemini-3.6-flash",
+                    model=model_name,
                     contents=prompt
                 )
-                return response.text.strip()
+                if response and response.text:
+                    return response.text.strip()
             except ValueError as e:
                 return f"AI sozlanmagan: {str(e)[:80]}"
-            except Exception as e:
-                err_str = str(e)
-                # 503 da qayta urinish
-                if "503" in err_str and attempt < max_retries - 1:
-                    time.sleep(2)
-                    continue
-                return f"Tushuntirish yuklanmadi (urinish {attempt+1}/{max_retries})"
-        return "Tushuntirish yuklanmadi."
+            except Exception:
+                # Agar ushbu modelda yuklama (503) yoki xatolik bo'lsa, keyingi modelga o'tadi
+                continue
+
+        return "AI tushuntirish berishda vaqtincha xatolik yuz berdi."
 
     return await asyncio.to_thread(_generate)
