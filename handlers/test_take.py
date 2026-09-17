@@ -22,11 +22,12 @@ def format_question_text(q_num: int, total: int, q_text: str, variants: dict, is
             vars_lines.append(f"<b>{letter})</b> {variants[letter]}")
     variants_block = "\n\n".join(vars_lines)
     return (
-        f"{prefix}<b>Savol {q_num} / {total}:</b>\n\n"
-        f"{q_text}\n\n"
+        f"{prefix}📌 <b>Savol {q_num} / {total}:</b>\n\n"
+        f"<b>{q_text}</b>\n\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Variantlar:</b>\n"
-        f"{variants_block}"
+        f"<b>Variantlar:</b>\n\n"
+        f"{variants_block}\n\n"
+        f"<i>To'g'ri javobni tanlash uchun pastdagi mos harfni bosing 👇</i>"
     )
 
 

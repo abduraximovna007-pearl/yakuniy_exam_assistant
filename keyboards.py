@@ -36,18 +36,19 @@ def start_test_keyboard(test_id: int):
     )
 
 def answer_keyboard(session_id: int, q_index: int, variants: dict):
-    rows = []
+    emoji_map = {"A": "🅰️ A", "B": "🅱️ B", "C": "🅲 C", "D": "🅳 D"}
+    btns = []
     for letter in ["A", "B", "C", "D"]:
         if letter in variants and variants[letter]:
-            val = str(variants[letter]).strip()
-            # Kengaytirilgan tugma matni (har bir qatorda 1 tadan to'liq kenglikda)
-            btn_text = f"{letter}) {val[:60]}..." if len(val) > 60 else f"{letter}) {val}"
-            rows.append([
+            btns.append(
                 InlineKeyboardButton(
-                    text=btn_text,
+                    text=emoji_map.get(letter, letter),
                     callback_data=f"answer_{session_id}_{q_index}_{letter}"
                 )
-            ])
+            )
+    # [ 🅰️ A ]  [ 🅱️ B ]
+    # [ 🅲 C ]  [ 🅳 D ]
+    rows = [btns[i:i+2] for i in range(0, len(btns), 2)]
     rows.append([InlineKeyboardButton(text="🛑 Testni yakunlash (Natijani ko'rish)", callback_data=f"stop_test_{session_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
