@@ -11,20 +11,20 @@ from handlers import start, upload, test_take, rating, admin_actions
 
 logging.basicConfig(level=logging.INFO)
 
-# Render.com avtomatik PORT beradi
+# Render.com avtomatik PORT va RENDER_EXTERNAL_URL beradi
 PORT = int(os.environ.get("PORT", 8080))
-WEBHOOK_HOST = os.environ.get("WEBHOOK_URL", "")  # Render URL
-WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
+WEBHOOK_HOST = (os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("WEBHOOK_URL") or "").rstrip("/")
+WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}" if BOT_TOKEN else "/webhook"
 
 
 async def on_startup(bot: Bot):
     await init_db()
-    if WEBHOOK_HOST:
+    if WEBHOOK_HOST and BOT_TOKEN:
         webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-        await bot.set_webhook(webhook_url)
+        await bot.set_webhook(webhook_url, drop_pending_updates=True)
         logging.info(f"Webhook set: {webhook_url}")
     else:
-        logging.info("WEBHOOK_URL not set — running in polling mode")
+        logging.info("Webhook o'rnatilmadi (WEBHOOK_HOST yoki BOT_TOKEN yo'q)")
 
 
 async def on_shutdown(bot: Bot):
@@ -74,8 +74,12 @@ async def polling_mode():
 
 
 if __name__ == "__main__":
-    if WEBHOOK_HOST:
-        # Server rejimi — webhook
+    if not BOT_TOKEN:
+        logging.error("XATOLIK: BOT_TOKEN aniqlanmadi! Server Environment variables bo'limiga BOT_TOKEN qo'shing.")
+        raise SystemExit("BOT_TOKEN is required!")
+
+    if WEBHOOK_HOST or os.environ.get("PORT"):
+        # Server rejimi — webhook / web server
         app = create_app()
         web.run_app(app, host="0.0.0.0", port=PORT)
     else:
