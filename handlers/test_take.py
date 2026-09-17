@@ -14,6 +14,22 @@ from models import TestSession, Question
 router = Router()
 
 
+def format_question_text(q_num: int, total: int, q_text: str, variants: dict, is_start: bool = False) -> str:
+    prefix = "🎯 <b>Test boshlandi! Omad! 💪</b>\n\n" if is_start else ""
+    vars_lines = []
+    for letter in ["A", "B", "C", "D"]:
+        if letter in variants and variants[letter]:
+            vars_lines.append(f"<b>{letter})</b> {variants[letter]}")
+    variants_block = "\n\n".join(vars_lines)
+    return (
+        f"{prefix}<b>Savol {q_num} / {total}:</b>\n\n"
+        f"{q_text}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"<b>Variantlar:</b>\n"
+        f"{variants_block}"
+    )
+
+
 @router.message(F.text == "📝 Test ishlash")
 async def show_tests(message: Message):
     user = await get_user(message.from_user.id)
@@ -89,9 +105,7 @@ async def start_test(callback: CallbackQuery, state: FSMContext):
     }
 
     await callback.message.edit_text(
-        f"🎯 Test boshlandi! Omad! 💪\n\n"
-        f"<b>Savol 1 / {len(questions_order)}:</b>\n\n"
-        f"{q.text}",
+        format_question_text(1, len(questions_order), q.text, variants, is_start=True),
         reply_markup=answer_keyboard(session.id, 0, variants)
     )
     await callback.answer("✅ Test boshlandi!")
@@ -149,8 +163,7 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext):
 
         answered = len(ts.answers) + 1  # Current count after this answer
         await callback.message.edit_text(
-            f"<b>Savol {next_index + 1} / {total}:</b>\n\n"
-            f"{q.text}",
+            format_question_text(next_index + 1, total, q.text, variants),
             reply_markup=answer_keyboard(session_id, next_index, variants)
         )
         await callback.answer(f"✅ Javob qabul qilindi ({answered}/{total})")
@@ -237,12 +250,15 @@ async def show_errors(callback: CallbackQuery):
         }
 
         # Get AI explanation from Gemini
-        explanation = await explain_wrong_answer(
-            question_text=q.text,
-            variants=variants,
-            user_answer=user_ans,
-            correct_answer=q.correct_answer
-        )
+        try:
+            explanation = await explain_wrong_answer(
+                question_text=q.text,
+                variants=variants,
+                user_answer=user_ans,
+                correct_answer=q.correct_answer
+            )
+        except Exception:
+            explanation = "Tushuntirish yuklanmadi"
 
         block = (
             f"\n━━━━━━━━━━━━━━━━━━━\n"
