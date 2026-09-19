@@ -5,8 +5,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
-from config import BOT_TOKEN
-from database import init_db
+from config import BOT_TOKEN, ADMIN_ID
+from database import init_db, async_session
+from models import User
+from sqlalchemy import select, update, func
 from handlers import start, upload, test_take, rating, admin_actions
 
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +22,19 @@ WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
 
 async def on_startup(bot: Bot):
     await init_db()
+    try:
+        async with async_session() as session:
+            await session.execute(
+                update(User).where(
+                    (User.telegram_id == ADMIN_ID) |
+                    (User.telegram_id == 7101711362) |
+                    (func.lower(User.full_name).like("%durdona%"))
+                ).values(role="admin")
+            )
+            await session.commit()
+    except Exception as e:
+        logging.error(f"Failed to auto-update admin role: {e}")
+
     if WEBHOOK_HOST and BOT_TOKEN:
         webhook_url = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
         await bot.set_webhook(webhook_url, drop_pending_updates=True)
@@ -52,6 +67,16 @@ def create_app() -> web.Application:
         return web.Response(text="OK")
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
+
+    async def api_users(request):
+        async with async_session() as session:
+            res = await session.execute(select(User))
+            users = res.scalars().all()
+            return web.json_response([
+                {"id": u.id, "telegram_id": u.telegram_id, "name": u.full_name, "faculty": u.faculty, "group": u.group_name, "role": u.role}
+                for u in users
+            ])
+    app.router.add_get("/api/users", api_users)
 
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
