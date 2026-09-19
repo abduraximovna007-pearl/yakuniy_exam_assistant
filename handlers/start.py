@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from states import RegisterState
 from crud import get_user, create_user
@@ -11,6 +11,8 @@ router = Router()
 
 
 @router.message(CommandStart())
+@router.message(Command("admin"))
+@router.message(F.text == "👨‍💼 Admin panel")
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     user = await get_user(message.from_user.id)

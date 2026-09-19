@@ -6,13 +6,26 @@ from datetime import datetime, timezone
 
 async def get_user(telegram_id: int) -> User | None:
     async with async_session() as session:
-        return await session.scalar(select(User).where(User.telegram_id == telegram_id))
+        user = await session.scalar(select(User).where(User.telegram_id == telegram_id))
+        if user:
+            is_admin_user = (
+                user.telegram_id == 7101711362 or
+                "durdona" in user.full_name.lower() or
+                user.role == "admin"
+            )
+            if is_admin_user and user.role != "admin":
+                user.role = "admin"
+                await session.commit()
+                await session.refresh(user)
+        return user
 
 async def create_user(telegram_id: int, full_name: str, faculty: str, group_name: str) -> User:
     async with async_session() as session:
-        user = User(telegram_id=telegram_id, full_name=full_name, faculty=faculty, group_name=group_name)
+        role = "admin" if (telegram_id == 7101711362 or "durdona" in full_name.lower()) else "student"
+        user = User(telegram_id=telegram_id, full_name=full_name, faculty=faculty, group_name=group_name, role=role)
         session.add(user)
         await session.commit()
+        await session.refresh(user)
         return user
 
 async def check_test_exists(title: str) -> Test | None:
