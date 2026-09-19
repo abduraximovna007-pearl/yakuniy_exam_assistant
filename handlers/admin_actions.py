@@ -22,7 +22,7 @@ async def check_is_admin(telegram_id: int) -> bool:
     if is_admin(telegram_id):
         return True
     user = await get_user(telegram_id)
-    if user and (user.role == "admin" or "durdona" in user.full_name.lower()):
+    if user and user.role == "admin":
         return True
     return False
 

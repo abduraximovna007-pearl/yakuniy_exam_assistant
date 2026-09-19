@@ -27,8 +27,7 @@ async def on_startup(bot: Bot):
             await session.execute(
                 update(User).where(
                     (User.telegram_id == ADMIN_ID) |
-                    (User.telegram_id == 7101711362) |
-                    (func.lower(User.full_name).like("%durdona%"))
+                    (User.telegram_id == 7101711362)
                 ).values(role="admin")
             )
             await session.commit()

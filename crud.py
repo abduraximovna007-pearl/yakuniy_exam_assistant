@@ -1,6 +1,7 @@
 from sqlalchemy import select, func
 from database import async_session
 from models import User, Test, Question, TestSession, Payment
+from config import is_admin
 import random
 from datetime import datetime, timezone
 
@@ -8,12 +9,7 @@ async def get_user(telegram_id: int) -> User | None:
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.telegram_id == telegram_id))
         if user:
-            is_admin_user = (
-                user.telegram_id == 7101711362 or
-                "durdona" in user.full_name.lower() or
-                user.role == "admin"
-            )
-            if is_admin_user and user.role != "admin":
+            if is_admin(telegram_id) and user.role != "admin":
                 user.role = "admin"
                 await session.commit()
                 await session.refresh(user)
@@ -21,7 +17,7 @@ async def get_user(telegram_id: int) -> User | None:
 
 async def create_user(telegram_id: int, full_name: str, faculty: str, group_name: str) -> User:
     async with async_session() as session:
-        role = "admin" if (telegram_id == 7101711362 or "durdona" in full_name.lower()) else "student"
+        role = "admin" if is_admin(telegram_id) else "student"
         user = User(telegram_id=telegram_id, full_name=full_name, faculty=faculty, group_name=group_name, role=role)
         session.add(user)
         await session.commit()

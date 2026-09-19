@@ -17,8 +17,8 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     user = await get_user(message.from_user.id)
 
-    # Admin tekshiruvi: ID, role yoki ism bo'yicha
-    is_admin_flag = is_admin(message.from_user.id) or (user and (user.role == "admin" or "durdona" in user.full_name.lower()))
+    # Admin tekshiruvi: Faqat Telegram ID yoki role bo'yicha
+    is_admin_flag = is_admin(message.from_user.id) or (user and user.role == "admin")
     if is_admin_flag:
         admin_name = user.full_name if user else "Admin"
         await message.answer(
@@ -90,7 +90,7 @@ async def get_group(message: Message, state: FSMContext):
     )
     await state.clear()
     
-    is_admin_flag = is_admin(message.from_user.id) or (user and (user.role == "admin" or "durdona" in user.full_name.lower()))
+    is_admin_flag = is_admin(message.from_user.id) or (user and user.role == "admin")
     if is_admin_flag:
         await message.answer(
             f"🎉 Admin sifatida ro'yxatdan o'tdingiz!\n\n"
