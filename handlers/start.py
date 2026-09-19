@@ -29,15 +29,22 @@ async def cmd_start(message: Message, state: FSMContext):
 
     if user:
         await message.answer(
-            f"👋 Xush kelibsiz, <b>{user.full_name}</b>!\n"
-            f"🏛️ Fakultet: {user.faculty}\n"
-            f"👥 Guruh: {user.group_name}\n\n"
-            "Quyidagi menyudan birini tanlang:",
+            f"👋 Assalomu alaykum, <b>{user.full_name}</b>!\n\n"
+            "🤖 <b>NDU Exam Assistant</b> botiga xush kelibsiz!\n"
+            "Botimiz sizga imtihonlarga tayyorlanish va bilimingizni oshirishda yordam beradi.\n\n"
+            "✨ <b>Botning asosiy qulayliklari:</b>\n"
+            "• 📝 <b>Test ishlash:</b> Fanlar bo'yicha testlarni yechish va natijani darhol olish\n"
+            "• 🤖 <b>AI Tushuntirish:</b> Xato yechgan savollaringizga AI (Sun'iy intellekt) orqali batafsil tushuntirish olish\n"
+            "• 📜 <b>Natijalar tarixi:</b> Ishlagan barcha testlaringiz va to'g'ri/xato javoblaringiz profilda saqlanadi\n"
+            "• 📤 <b>Test yuklash:</b> O'zingizning Word (docx) testlaringizni botga joylash\n"
+            "• 🏆 <b>Reyting:</b> Guruh va barcha talabalar o'rtasida o'z o'rningizni kuzatish\n\n"
+            "Quyidagi menyudan kerakli bo'limni tanlang 👇",
             reply_markup=main_menu()
         )
     else:
         await message.answer(
-            "👋 Salom! Botga xush kelibsiz!\n\n"
+            "👋 Assalomu alaykum! <b>NDU Exam Assistant</b> botiga xush kelibsiz!\n\n"
+            "🤖 Botimiz talabalarga imtihonlarga tayyorlanish, test yechish, xatolarni AI orqali tushunish va test yuklash qulayliklarini taqdim etadi.\n\n"
             "Davom etish uchun avval ro'yxatdan o'ting.\n"
             "To'liq ismingizni kiriting (Familiya Ism):"
         )

@@ -208,3 +208,15 @@ async def get_system_stats() -> dict:
             "questions": questions_count or 0,
         }
 
+async def get_user_completed_sessions(user_id: int, limit: int = 20) -> list[tuple[TestSession, Test]]:
+    async with async_session() as session:
+        q = select(TestSession, Test).join(
+            Test, TestSession.test_id == Test.id
+        ).where(
+            TestSession.user_id == user_id,
+            TestSession.status == 'completed'
+        ).order_by(TestSession.completed_at.desc()).limit(limit)
+        result = await session.execute(q)
+        return list(result.all())
+
+
