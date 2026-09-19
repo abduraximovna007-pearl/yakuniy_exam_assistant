@@ -4,8 +4,8 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from states import RegisterState
 from crud import get_user, create_user
-from keyboards import main_menu
-from config import ADMIN_ID
+from keyboards import main_menu, admin_menu
+from config import ADMIN_ID, is_admin
 
 router = Router()
 
@@ -13,15 +13,26 @@ router = Router()
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
-    is_admin = (message.from_user.id == ADMIN_ID)
     user = await get_user(message.from_user.id)
+
+    # Agar foydalanuvchi Admin bo'lsa — faqat Admin Panel chiqadi!
+    if is_admin(message.from_user.id) or (user and user.role == "admin"):
+        admin_name = user.full_name if user else "Admin"
+        await message.answer(
+            f"👋 Assalomu alaykum, <b>{admin_name}</b> (Boshqaruvchi)!\n\n"
+            "👨‍💼 <b>Admin boshqaruv paneli</b>\n"
+            "Quyidagi menyudan kerakli bo'limni tanlang 👇",
+            reply_markup=admin_menu()
+        )
+        return
+
     if user:
         await message.answer(
             f"👋 Xush kelibsiz, <b>{user.full_name}</b>!\n"
             f"🏛️ Fakultet: {user.faculty}\n"
             f"👥 Guruh: {user.group_name}\n\n"
             "Quyidagi menyudan birini tanlang:",
-            reply_markup=main_menu(is_admin=is_admin)
+            reply_markup=main_menu()
         )
     else:
         await message.answer(

@@ -7,12 +7,12 @@ from crud import (
     get_test_participants, get_recent_completed_sessions,
     get_tests_with_stats, get_global_rating, get_system_stats
 )
-from config import ADMIN_ID, TEST_PRICE
+from config import ADMIN_ID, TEST_PRICE, is_admin
 from database import async_session
 from models import Question
 from sqlalchemy import select, func
 from states import AdminCardState
-from keyboards import admin_panel_keyboard, admin_back_keyboard
+from keyboards import admin_panel_keyboard, admin_back_keyboard, admin_menu
 
 router = Router()
 
@@ -29,7 +29,7 @@ async def _count_questions(test_id: int) -> int:
 
 @router.callback_query(F.data.startswith("send_card_"))
 async def request_card_number(callback: CallbackQuery, state: FSMContext):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -56,7 +56,7 @@ async def request_card_number(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminCardState.waiting_for_card)
 async def handle_card_number(message: Message, state: FSMContext, bot: Bot):
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -91,7 +91,7 @@ async def handle_card_number(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def confirm_test(callback: CallbackQuery, bot: Bot):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -142,7 +142,7 @@ async def confirm_test(callback: CallbackQuery, bot: Bot):
 
 @router.callback_query(F.data.startswith("reject_"))
 async def reject_test_handler(callback: CallbackQuery, bot: Bot):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -193,20 +193,118 @@ async def reject_test_handler(callback: CallbackQuery, bot: Bot):
 @router.message(Command("admin"))
 @router.message(F.text == "👨‍💼 Admin panel")
 async def show_admin_panel(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Bu bo'lim faqat admin uchun!")
         return
 
     await message.answer(
         "👨‍💼 <b>Admin boshqaruv paneli</b>\n\n"
-        "Quyidagi bo'limlardan birini tanlang:",
-        reply_markup=admin_panel_keyboard()
+        "Quyidagi bo'limlardan birini tanlang 👇",
+        reply_markup=admin_menu()
     )
+
+
+@router.message(F.text == "📋 Ochiq testlar va ishlaganlar")
+async def msg_admin_tests_list(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    tests_stats = await get_tests_with_stats()
+    if not tests_stats:
+        await message.answer("📭 Hozircha tasdiqlangan (ochiq) testlar mavjud emas.")
+        return
+
+    btns = []
+    for item in tests_stats:
+        t = item["test"]
+        count = item["participants_count"]
+        btns.append([
+            InlineKeyboardButton(
+                text=f"📋 {t.title} ({count} nafar)",
+                callback_data=f"admin_test_view_{t.id}"
+            )
+        ])
+
+    await message.answer(
+        "📋 <b>Ochiq testlar ro'yxati:</b>\n\n"
+        "O'quvchilar natijalarini ko'rish uchun testni bosing 👇",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=btns)
+    )
+
+
+@router.message(F.text == "👥 Oxirgi ishlagan o'quvchilar")
+async def msg_admin_recent_students(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    sessions = await get_recent_completed_sessions(limit=25)
+    if not sessions:
+        await message.answer("👥 Hozircha hech kim test ishlamagan.")
+        return
+
+    lines = ["👥 <b>Oxirgi test ishlagan o'quvchilar (oxirgi 25 ta):</b>\n"]
+    for i, (ts, user, t) in enumerate(sessions, 1):
+        pct = round(ts.score / ts.total * 100) if ts.total else 0
+        date_str = ts.completed_at.strftime("%d.%m %H:%M") if ts.completed_at else "—"
+        lines.append(
+            f"{i}. <b>{user.full_name}</b> ({user.faculty}, {user.group_name})\n"
+            f"   📋 Test: {t.title}\n"
+            f"   🎯 Natija: <b>{ts.score}/{ts.total}</b> ({pct}%) | ⏱ {date_str}"
+        )
+
+    text = "\n\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n<i>...(qolgan natijalar qisqartirildi)</i>"
+
+    await message.answer(text)
+
+
+@router.message(F.text == "🌐 Barcha o'quvchilar reytingi")
+async def msg_admin_global_rating(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    ratings = await get_global_rating(limit=30)
+    if not ratings:
+        await message.answer("🏆 Hozircha hech qanday reyting ma'lumoti mavjud emas.")
+        return
+
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = ["🌐 <b>Barcha o'quvchilar bo'yicha umumiy reyting:</b>\n"]
+
+    for i, (u, total_score) in enumerate(ratings, 1):
+        medal = medals.get(i, f"{i}.")
+        lines.append(
+            f"{medal} <b>{u.full_name}</b> ({u.faculty}, {u.group_name})\n"
+            f"   🎯 Jami to'plagan bali: <b>{total_score or 0} ball</b>"
+        )
+
+    text = "\n\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n<i>...(qolgan reyting qisqartirildi)</i>"
+
+    await message.answer(text)
+
+
+@router.message(F.text == "📊 Tizim statistikasi")
+async def msg_admin_stats(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    stats = await get_system_stats()
+    text = (
+        "📊 <b>Tizim statistikasi:</b>\n\n"
+        f"👥 Ro'yxatdan o'tgan talabalar: <b>{stats['users']} nafar</b>\n"
+        f"📋 Tasdiqlangan ochiq testlar: <b>{stats['tests']} ta</b>\n"
+        f"❓ Bazadagi jami savollar: <b>{stats['questions']} ta</b>\n"
+        f"🏁 Ishlangan test urinishlari: <b>{stats['sessions']} ta</b>"
+    )
+    await message.answer(text)
 
 
 @router.callback_query(F.data == "admin_panel_main")
 async def callback_admin_panel_main(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -220,7 +318,7 @@ async def callback_admin_panel_main(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_tests_list")
 async def admin_tests_list_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -255,7 +353,7 @@ async def admin_tests_list_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin_test_view_"))
 async def admin_test_view_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -295,7 +393,6 @@ async def admin_test_view_handler(callback: CallbackQuery):
         )
 
     text = "\n\n".join(lines)
-    # If text is too long for one message, chunk it or limit to top 40
     if len(text) > 4000:
         text = text[:3950] + "\n\n<i>...(qolgan natijalar qisqartirildi)</i>"
 
@@ -310,7 +407,7 @@ async def admin_test_view_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_recent_students")
 async def admin_recent_students_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -346,7 +443,7 @@ async def admin_recent_students_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_global_rating")
 async def admin_global_rating_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -382,7 +479,7 @@ async def admin_global_rating_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats_handler(callback: CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("❌ Siz admin emassiz!", show_alert=True)
         return
 
@@ -400,4 +497,5 @@ async def admin_stats_handler(callback: CallbackQuery):
         reply_markup=admin_back_keyboard()
     )
     await callback.answer()
+
 

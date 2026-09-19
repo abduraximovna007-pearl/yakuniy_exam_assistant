@@ -1,14 +1,21 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-def main_menu(is_admin: bool = False):
-    keyboard = [
-        [KeyboardButton(text="📝 Test ishlash"), KeyboardButton(text="📤 Test yuklash")],
-        [KeyboardButton(text="🏆 Reyting"), KeyboardButton(text="👤 Profil")],
-    ]
-    if is_admin:
-        keyboard.append([KeyboardButton(text="👨‍💼 Admin panel")])
+def admin_menu():
     return ReplyKeyboardMarkup(
-        keyboard=keyboard,
+        keyboard=[
+            [KeyboardButton(text="📋 Ochiq testlar va ishlaganlar")],
+            [KeyboardButton(text="👥 Oxirgi ishlagan o'quvchilar"), KeyboardButton(text="🌐 Barcha o'quvchilar reytingi")],
+            [KeyboardButton(text="📊 Tizim statistikasi")],
+        ],
+        resize_keyboard=True
+    )
+
+def main_menu():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📝 Test ishlash"), KeyboardButton(text="📤 Test yuklash")],
+            [KeyboardButton(text="🏆 Reyting"), KeyboardButton(text="👤 Profil")],
+        ],
         resize_keyboard=True
     )
 
