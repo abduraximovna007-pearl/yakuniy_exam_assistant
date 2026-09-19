@@ -1,11 +1,14 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-def main_menu():
+def main_menu(is_admin: bool = False):
+    keyboard = [
+        [KeyboardButton(text="📝 Test ishlash"), KeyboardButton(text="📤 Test yuklash")],
+        [KeyboardButton(text="🏆 Reyting"), KeyboardButton(text="👤 Profil")],
+    ]
+    if is_admin:
+        keyboard.append([KeyboardButton(text="👨‍💼 Admin panel")])
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📝 Test ishlash"), KeyboardButton(text="📤 Test yuklash")],
-            [KeyboardButton(text="🏆 Reyting"), KeyboardButton(text="👤 Profil")],
-        ],
+        keyboard=keyboard,
         resize_keyboard=True
     )
 
@@ -28,6 +31,23 @@ def admin_confirm_keyboard(test_id: int, user_id: int):
         ]
     )
 
+def admin_panel_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Ochiq testlar va ishlaganlar", callback_data="admin_tests_list")],
+            [InlineKeyboardButton(text="👥 Oxirgi ishlagan o'quvchilar", callback_data="admin_recent_students")],
+            [InlineKeyboardButton(text="🌐 Barcha o'quvchilar reytingi", callback_data="admin_global_rating")],
+            [InlineKeyboardButton(text="📊 Tizim statistikasi", callback_data="admin_stats")],
+        ]
+    )
+
+def admin_back_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Admin panelga qaytish", callback_data="admin_panel_main")]
+        ]
+    )
+
 def start_test_keyboard(test_id: int):
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -46,8 +66,6 @@ def answer_keyboard(session_id: int, q_index: int, variants: dict):
                     callback_data=f"answer_{session_id}_{q_index}_{letter}"
                 )
             )
-    # [ 🅰️ A ]  [ 🅱️ B ]
-    # [ 🅲 C ]  [ 🅳 D ]
     rows = [btns[i:i+2] for i in range(0, len(btns), 2)]
     rows.append([InlineKeyboardButton(text="🛑 Testni yakunlash (Natijani ko'rish)", callback_data=f"stop_test_{session_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -55,6 +73,13 @@ def answer_keyboard(session_id: int, q_index: int, variants: dict):
 def show_errors_keyboard(session_id: int):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Xatolarni ko'rish", callback_data=f"errors_{session_id}")]
+            [InlineKeyboardButton(text="🤖 Xatolar uchun AI tushuntirish", callback_data=f"errors_{session_id}")]
+        ]
+    )
+
+def ai_explanation_keyboard(session_id: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🤖 Xatolar uchun AI tushuntirish", callback_data=f"errors_{session_id}")]
         ]
     )

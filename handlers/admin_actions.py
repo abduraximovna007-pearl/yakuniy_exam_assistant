@@ -1,12 +1,18 @@
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from crud import approve_test, reject_test, get_pending_test
+from crud import (
+    approve_test, reject_test, get_pending_test,
+    get_test_participants, get_recent_completed_sessions,
+    get_tests_with_stats, get_global_rating, get_system_stats
+)
 from config import ADMIN_ID, TEST_PRICE
 from database import async_session
 from models import Question
 from sqlalchemy import select, func
 from states import AdminCardState
+from keyboards import admin_panel_keyboard, admin_back_keyboard
 
 router = Router()
 
@@ -180,3 +186,218 @@ async def reject_test_handler(callback: CallbackQuery, bot: Bot):
         )
     except Exception:
         pass
+
+
+# ── Admin Panel va Natijalar ──────────────────────────────────────────────
+
+@router.message(Command("admin"))
+@router.message(F.text == "👨‍💼 Admin panel")
+async def show_admin_panel(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("❌ Bu bo'lim faqat admin uchun!")
+        return
+
+    await message.answer(
+        "👨‍💼 <b>Admin boshqaruv paneli</b>\n\n"
+        "Quyidagi bo'limlardan birini tanlang:",
+        reply_markup=admin_panel_keyboard()
+    )
+
+
+@router.callback_query(F.data == "admin_panel_main")
+async def callback_admin_panel_main(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Siz admin emassiz!", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "👨‍💼 <b>Admin boshqaruv paneli</b>\n\n"
+        "Quyidagi bo'limlardan birini tanlang:",
+        reply_markup=admin_panel_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_tests_list")
+async def admin_tests_list_handler(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Siz admin emassiz!", show_alert=True)
+        return
+
+    tests_stats = await get_tests_with_stats()
+    if not tests_stats:
+        await callback.message.edit_text(
+            "📭 Hozircha tasdiqlangan (ochiq) testlar mavjud emas.",
+            reply_markup=admin_back_keyboard()
+        )
+        await callback.answer()
+        return
+
+    btns = []
+    for item in tests_stats:
+        t = item["test"]
+        count = item["participants_count"]
+        btns.append([
+            InlineKeyboardButton(
+                text=f"📋 {t.title} ({count} nafar)",
+                callback_data=f"admin_test_view_{t.id}"
+            )
+        ])
+    btns.append([InlineKeyboardButton(text="◀️ Admin panelga qaytish", callback_data="admin_panel_main")])
+
+    await callback.message.edit_text(
+        "📋 <b>Ochiq testlar ro'yxati:</b>\n\n"
+        "O'quvchilar natijalarini ko'rish uchun testni tanlang 👇",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=btns)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_test_view_"))
+async def admin_test_view_handler(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Siz admin emassiz!", show_alert=True)
+        return
+
+    test_id = int(callback.data.split("_")[-1])
+    test = await get_pending_test(test_id)
+    if not test:
+        await callback.answer("❌ Test topilmadi!", show_alert=True)
+        return
+
+    participants = await get_test_participants(test_id)
+    if not participants:
+        await callback.message.edit_text(
+            f"📋 <b>{test.title}</b>\n\n"
+            f"❓ Jami savollar: {test.question_count} ta\n"
+            f"👥 Ishlagan o'quvchilar: 0 nafar\n\n"
+            "Hozircha hech bir o'quvchi bu testni ishlamagan.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Testlar ro'yxatiga qaytish", callback_data="admin_tests_list")]
+            ])
+        )
+        await callback.answer()
+        return
+
+    lines = [
+        f"📋 <b>{test.title}</b> testi natijalari:\n"
+        f"👥 Jami ishlaganlar: <b>{len(participants)} nafar</b>\n"
+    ]
+
+    for i, (ts, user) in enumerate(participants, 1):
+        pct = round(ts.score / ts.total * 100) if ts.total else 0
+        date_str = ts.completed_at.strftime("%d.%m.%Y %H:%M") if ts.completed_at else "—"
+        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+        lines.append(
+            f"{emoji} <b>{user.full_name}</b>\n"
+            f"   🏛️ Fakultet: {user.faculty} | Guruh: {user.group_name}\n"
+            f"   🎯 Ball: <b>{ts.score}/{ts.total}</b> ({pct}%) | ⏱ {date_str}"
+        )
+
+    text = "\n\n".join(lines)
+    # If text is too long for one message, chunk it or limit to top 40
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n<i>...(qolgan natijalar qisqartirildi)</i>"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Testlar ro'yxatiga qaytish", callback_data="admin_tests_list")]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_recent_students")
+async def admin_recent_students_handler(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Siz admin emassiz!", show_alert=True)
+        return
+
+    sessions = await get_recent_completed_sessions(limit=25)
+    if not sessions:
+        await callback.message.edit_text(
+            "👥 Hozircha hech kim test ishlamagan.",
+            reply_markup=admin_back_keyboard()
+        )
+        await callback.answer()
+        return
+
+    lines = ["👥 <b>Oxirgi test ishlagan o'quvchilar (oxirgi 25 ta):</b>\n"]
+    for i, (ts, user, t) in enumerate(sessions, 1):
+        pct = round(ts.score / ts.total * 100) if ts.total else 0
+        date_str = ts.completed_at.strftime("%d.%m %H:%M") if ts.completed_at else "—"
+        lines.append(
+            f"{i}. <b>{user.full_name}</b> ({user.faculty}, {user.group_name})\n"
+            f"   📋 Test: {t.title}\n"
+            f"   🎯 Natija: <b>{ts.score}/{ts.total}</b> ({pct}%) | ⏱ {date_str}"
+        )
+
+    text = "\n\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n<i>...(qolgan natijalar qisqartirildi)</i>"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_back_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_global_rating")
+async def admin_global_rating_handler(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Siz admin emassiz!", show_alert=True)
+        return
+
+    ratings = await get_global_rating(limit=30)
+    if not ratings:
+        await callback.message.edit_text(
+            "🏆 Hozircha hech qanday reyting ma'lumoti mavjud emas.",
+            reply_markup=admin_back_keyboard()
+        )
+        await callback.answer()
+        return
+
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = ["🌐 <b>Barcha o'quvchilar bo'yicha umumiy reyting:</b>\n"]
+
+    for i, (u, total_score) in enumerate(ratings, 1):
+        medal = medals.get(i, f"{i}.")
+        lines.append(
+            f"{medal} <b>{u.full_name}</b> ({u.faculty}, {u.group_name})\n"
+            f"   🎯 Jami to'plagan bali: <b>{total_score or 0} ball</b>"
+        )
+
+    text = "\n\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n<i>...(qolgan reyting qisqartirildi)</i>"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_back_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_stats")
+async def admin_stats_handler(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Siz admin emassiz!", show_alert=True)
+        return
+
+    stats = await get_system_stats()
+    text = (
+        "📊 <b>Tizim statistikasi:</b>\n\n"
+        f"👥 Ro'yxatdan o'tgan talabalar: <b>{stats['users']} nafar</b>\n"
+        f"📋 Tasdiqlangan ochiq testlar: <b>{stats['tests']} ta</b>\n"
+        f"❓ Bazadagi jami savollar: <b>{stats['questions']} ta</b>\n"
+        f"🏁 Ishlangan test urinishlari: <b>{stats['sessions']} ta</b>"
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_back_keyboard()
+    )
+    await callback.answer()
+

@@ -1,6 +1,6 @@
 from aiogram import Router, F
-from aiogram.types import Message
-from crud import get_user, get_rating, get_user_scores
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from crud import get_user, get_rating, get_user_scores, get_global_rating
 from keyboards import main_menu
 
 router = Router()
@@ -14,12 +14,18 @@ async def show_rating(message: Message):
         return
 
     results = await get_rating(user.faculty, user.group_name)
+    global_btn = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🌐 Umumiy reyting (Barcha talabalar)", callback_data="show_global_rating")]
+        ]
+    )
 
     if not results:
         await message.answer(
             f"📊 <b>{user.faculty} — {user.group_name}</b>\n\n"
-            "Hozircha reyting ma'lumoti yo'q.\n"
-            "Test ishlaganingizdan so'ng reyting paydo bo'ladi."
+            "Guruhingizda hozircha reyting ma'lumoti yo'q.\n"
+            "Umumiy reytingni ko'rish uchun pastdagi tugmani bosing 👇",
+            reply_markup=global_btn
         )
         return
 
@@ -31,7 +37,25 @@ async def show_rating(message: Message):
         you = " 👈 <b>Sen</b>" if u.telegram_id == message.from_user.id else ""
         text += f"{medal} {u.full_name} — <b>{score or 0}</b> ball{you}\n"
 
-    await message.answer(text)
+    await message.answer(text, reply_markup=global_btn)
+
+
+@router.callback_query(F.data == "show_global_rating")
+async def show_global_rating_callback(callback: CallbackQuery):
+    ratings = await get_global_rating(limit=30)
+    if not ratings:
+        await callback.answer("Hozircha reyting ma'lumoti yo'q.", show_alert=True)
+        return
+
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    text = "🌐 <b>Umumiy reyting (Barcha talabalar):</b>\n\n"
+    for i, (u, score) in enumerate(ratings, 1):
+        medal = medals.get(i, f"{i}.")
+        you = " 👈 <b>Sen</b>" if u.telegram_id == callback.from_user.id else ""
+        text += f"{medal} {u.full_name} ({u.faculty}, {u.group_name}) — <b>{score or 0}</b> ball{you}\n"
+
+    await callback.message.answer(text)
+    await callback.answer()
 
 
 @router.message(F.text == "👤 Profil")

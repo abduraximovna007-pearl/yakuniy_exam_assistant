@@ -89,11 +89,11 @@ async def update_session_answer(session_id: int, q_index: int, answer: str):
             ts.answers = answers
             await session.commit()
 
-async def complete_session(session_id: int) -> tuple[int, int]:
+async def complete_session(session_id: int) -> tuple[int, int, int]:
     async with async_session() as session:
         ts = await session.get(TestSession, session_id)
         if not ts:
-            return 0, 0
+            return 0, 0, 0
         score = 0
         questions = ts.questions_order
         answers = ts.answers or {}
@@ -107,7 +107,7 @@ async def complete_session(session_id: int) -> tuple[int, int]:
         ts.status = 'completed'
         ts.completed_at = datetime.now(timezone.utc)
         await session.commit()
-        return score, ts.total
+        return score, len(answers), ts.total
 
 async def create_payment(user_id: int, test_id: int, screenshot: str, amount: int) -> Payment:
     async with async_session() as session:
@@ -128,6 +128,17 @@ async def get_rating(faculty: str, group_name: str) -> list[tuple]:
         result = await session.execute(q)
         return list(result.all())
 
+async def get_global_rating(limit: int = 50) -> list[tuple]:
+    async with async_session() as session:
+        subq = select(TestSession.user_id, func.sum(TestSession.score).label('total_score')).where(
+            TestSession.status == 'completed'
+        ).group_by(TestSession.user_id).subquery()
+        q = select(User, subq.c.total_score).join(
+            subq, User.id == subq.c.user_id
+        ).order_by(subq.c.total_score.desc()).limit(limit)
+        result = await session.execute(q)
+        return list(result.all())
+
 async def get_user_scores(user_id: int) -> int:
     async with async_session() as session:
         result = await session.execute(
@@ -140,3 +151,60 @@ async def get_user_scores(user_id: int) -> int:
 async def get_pending_test(test_id: int) -> Test | None:
     async with async_session() as session:
         return await session.get(Test, test_id)
+
+async def get_test_participants(test_id: int) -> list[tuple[TestSession, User]]:
+    async with async_session() as session:
+        q = select(TestSession, User).join(
+            User, TestSession.user_id == User.id
+        ).where(
+            TestSession.test_id == test_id,
+            TestSession.status == 'completed'
+        ).order_by(TestSession.completed_at.desc())
+        result = await session.execute(q)
+        return list(result.all())
+
+async def get_recent_completed_sessions(limit: int = 30) -> list[tuple[TestSession, User, Test]]:
+    async with async_session() as session:
+        q = select(TestSession, User, Test).join(
+            User, TestSession.user_id == User.id
+        ).join(
+            Test, TestSession.test_id == Test.id
+        ).where(
+            TestSession.status == 'completed'
+        ).order_by(TestSession.completed_at.desc()).limit(limit)
+        result = await session.execute(q)
+        return list(result.all())
+
+async def get_tests_with_stats() -> list[dict]:
+    async with async_session() as session:
+        result = await session.execute(
+            select(Test).where(Test.status == 'approved')
+        )
+        tests = list(result.scalars().all())
+        data = []
+        for t in tests:
+            count = await session.scalar(
+                select(func.count(TestSession.id)).where(
+                    TestSession.test_id == t.id,
+                    TestSession.status == 'completed'
+                )
+            )
+            data.append({
+                "test": t,
+                "participants_count": count or 0
+            })
+        return data
+
+async def get_system_stats() -> dict:
+    async with async_session() as session:
+        users_count = await session.scalar(select(func.count(User.id)))
+        tests_count = await session.scalar(select(func.count(Test.id)).where(Test.status == 'approved'))
+        sessions_count = await session.scalar(select(func.count(TestSession.id)).where(TestSession.status == 'completed'))
+        questions_count = await session.scalar(select(func.count(Question.id)))
+        return {
+            "users": users_count or 0,
+            "tests": tests_count or 0,
+            "sessions": sessions_count or 0,
+            "questions": questions_count or 0,
+        }
+

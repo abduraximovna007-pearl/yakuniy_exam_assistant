@@ -1,3 +1,5 @@
+import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -9,7 +11,8 @@ from crud import (
 from keyboards import start_test_keyboard, answer_keyboard, show_errors_keyboard, main_menu
 from ai_helper import explain_wrong_answer
 from database import async_session
-from models import TestSession, Question
+from models import TestSession, Question, User, Test
+from config import ADMIN_ID
 
 router = Router()
 
@@ -133,19 +136,7 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext):
 
         # All questions answered — auto finish
         if next_index >= total:
-            score, total_q = await complete_session(session_id)
-            await state.clear()
-            pct = round(score / total_q * 100) if total_q else 0
-            emoji = "🏆" if pct >= 80 else "✅" if pct >= 60 else "📊"
-            await callback.message.edit_text(
-                f"{emoji} <b>Test yakunlandi!</b>\n\n"
-                f"✅ To'g'ri: <b>{score}</b>\n"
-                f"❌ Xato: <b>{total_q - score}</b>\n"
-                f"📊 Natija: <b>{score}/{total_q}</b> ({pct}%)\n\n"
-                "Xatolaringizni ko'rish uchun quyidagi tugmani bosing 👇",
-                reply_markup=show_errors_keyboard(session_id)
-            )
-            await callback.answer("🏁 Test yakunlandi!")
+            await finish_and_show_results(callback, session_id, state)
             return
 
         # Show next question
@@ -170,28 +161,120 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Javob qabul qilindi ({answered}/{total})")
 
 
+async def finish_and_show_results(callback: CallbackQuery, session_id: int, state: FSMContext):
+    score, answered_count, total = await complete_session(session_id)
+    await state.clear()
+
+    if answered_count == 0:
+        await callback.message.edit_text("❌ Birorta ham savolga javob berilmadi.")
+        await callback.answer("🏁 Test yakunlandi!")
+        return
+
+    wrong_count = answered_count - score
+    pct = round(score / answered_count * 100) if answered_count else 0
+    emoji = "🏆" if pct >= 80 else "✅" if pct >= 60 else "📊"
+
+    async with async_session() as db:
+        ts = await db.get(TestSession, session_id)
+        if not ts:
+            await callback.message.edit_text("❌ Sessiya ma'lumoti topilmadi.")
+            return
+
+        user = await db.get(User, ts.user_id)
+        test = await db.get(Test, ts.test_id)
+        test_title = test.title if test else "Test"
+
+        items = []
+        for idx_str, user_ans in sorted(ts.answers.items(), key=lambda x: int(x[0])):
+            idx = int(idx_str)
+            if 0 <= idx < len(ts.questions_order):
+                q = await db.get(Question, ts.questions_order[idx])
+                if q:
+                    items.append((idx + 1, q, user_ans))
+
+    # Real-time admin notification
+    if ADMIN_ID and user:
+        try:
+            now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+            admin_msg = (
+                f"📢 <b>O'quvchi test ishladi!</b>\n\n"
+                f"📋 Test: <b>{test_title}</b>\n"
+                f"👤 O'quvchi: <b>{user.full_name}</b>\n"
+                f"🏛️ Fakultet: <b>{user.faculty}</b> | Guruh: <b>{user.group_name}</b>\n"
+                f"📝 Ishlangan: <b>{answered_count} / {total} ta</b>\n"
+                f"✅ To'g'ri: <b>{score} ta</b>\n"
+                f"❌ Xato: <b>{wrong_count} ta</b>\n"
+                f"📊 Natija: <b>{pct}%</b>\n"
+                f"⏱ Vaqt: <b>{now_str}</b>"
+            )
+            await callback.bot.send_message(chat_id=ADMIN_ID, text=admin_msg)
+        except Exception as e:
+            logging.error(f"Error sending admin notification: {e}")
+
+    summary_header = (
+        f"{emoji} <b>Test yakunlandi!</b>\n\n"
+        f"📋 Test: <b>{test_title}</b>\n"
+        f"📝 Ishlangan savollar: <b>{answered_count} ta</b> (jami {total} tadan)\n"
+        f"✅ To'g'ri javoblar: <b>{score} ta</b>\n"
+        f"❌ Noto'g'ri javoblar: <b>{wrong_count} ta</b>\n"
+        f"📊 Natija: <b>{score}/{answered_count}</b> ({pct}%)\n\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"📑 <b>Ishlangan savollar va to'g'ri javoblar:</b>"
+    )
+
+    chunks = []
+    current_chunk = summary_header
+
+    for num, q, user_ans in items:
+        variants = {
+            "A": q.variant_a,
+            "B": q.variant_b,
+            "C": q.variant_c,
+            "D": q.variant_d
+        }
+        user_var_text = variants.get(user_ans, "")
+        correct_var_text = variants.get(q.correct_answer, "")
+        is_correct = (user_ans == q.correct_answer)
+
+        if is_correct:
+            block = (
+                f"\n\n📌 <b>{num}-savol:</b> {q.text}\n"
+                f"👉 Sizning javobingiz: <b>{user_ans}) {user_var_text}</b>\n"
+                f"✅ To'g'ri javob: <b>{q.correct_answer}) {correct_var_text}</b>\n"
+                f"<i>Holat: To'g'ri ✅</i>"
+            )
+        else:
+            block = (
+                f"\n\n📌 <b>{num}-savol:</b> {q.text}\n"
+                f"👉 Sizning javobingiz: <b>{user_ans}) {user_var_text}</b> ❌\n"
+                f"✅ To'g'ri javob: <b>{q.correct_answer}) {correct_var_text}</b>\n"
+                f"<i>Holat: Noto'g'ri ❌</i>"
+            )
+
+        if len(current_chunk) + len(block) > 3800:
+            chunks.append(current_chunk)
+            current_chunk = block
+        else:
+            current_chunk += block
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    first_markup = show_errors_keyboard(session_id) if (len(chunks) == 1 and wrong_count > 0) else None
+    await callback.message.edit_text(chunks[0], reply_markup=first_markup)
+
+    for i, chunk in enumerate(chunks[1:], 1):
+        is_last = (i == len(chunks) - 1)
+        markup = show_errors_keyboard(session_id) if (is_last and wrong_count > 0) else None
+        await callback.message.answer(chunk, reply_markup=markup)
+
+    await callback.answer("🏁 Test yakunlandi!")
+
+
 @router.callback_query(F.data.startswith("stop_test_"))
 async def stop_test(callback: CallbackQuery, state: FSMContext):
     session_id = int(callback.data.split("_")[-1])
-    score, total = await complete_session(session_id)
-    await state.clear()
-
-    if total == 0:
-        await callback.message.edit_text("❌ Test ma'lumotlari topilmadi.")
-        return
-
-    pct = round(score / total * 100) if total else 0
-    emoji = "🏆" if pct >= 80 else "✅" if pct >= 60 else "📊"
-
-    await callback.message.edit_text(
-        f"{emoji} <b>Test yakunlandi!</b>\n\n"
-        f"✅ To'g'ri: <b>{score}</b>\n"
-        f"❌ Xato: <b>{total - score}</b>\n"
-        f"📊 Natija: <b>{score}/{total}</b> ({pct}%)\n\n"
-        "Xatolaringizni ko'rish uchun quyidagi tugmani bosing 👇",
-        reply_markup=show_errors_keyboard(session_id)
-    )
-    await callback.answer("🏁 Test yakunlandi!")
+    await finish_and_show_results(callback, session_id, state)
 
 
 @router.callback_query(F.data.startswith("errors_"))

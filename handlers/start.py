@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from states import RegisterState
 from crud import get_user, create_user
 from keyboards import main_menu
+from config import ADMIN_ID
 
 router = Router()
 
@@ -12,6 +13,7 @@ router = Router()
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
+    is_admin = (message.from_user.id == ADMIN_ID)
     user = await get_user(message.from_user.id)
     if user:
         await message.answer(
@@ -19,7 +21,7 @@ async def cmd_start(message: Message, state: FSMContext):
             f"🏛️ Fakultet: {user.faculty}\n"
             f"👥 Guruh: {user.group_name}\n\n"
             "Quyidagi menyudan birini tanlang:",
-            reply_markup=main_menu()
+            reply_markup=main_menu(is_admin=is_admin)
         )
     else:
         await message.answer(
@@ -66,11 +68,12 @@ async def get_group(message: Message, state: FSMContext):
         group_name=group
     )
     await state.clear()
+    is_admin = (message.from_user.id == ADMIN_ID)
     await message.answer(
         f"🎉 Ro'yxatdan muvaffaqiyatli o'tdingiz!\n\n"
         f"👤 Ism: <b>{user.full_name}</b>\n"
         f"🏛️ Fakultet: <b>{user.faculty}</b>\n"
         f"👥 Guruh: <b>{user.group_name}</b>\n\n"
         "Endi testlardan foydalanishingiz mumkin! ⬇️",
-        reply_markup=main_menu()
+        reply_markup=main_menu(is_admin=is_admin)
     )

@@ -59,9 +59,10 @@ def create_app() -> web.Application:
 
 
 async def polling_mode():
-    """WEBHOOK_URL yo'q bo'lsa — lokal polling (test uchun)"""
+    """Lokal polling rejimi (test uchun)"""
     await init_db()
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+    await bot.delete_webhook(drop_pending_updates=True)
     dp = Dispatcher()
     dp.include_routers(
         start.router,
@@ -70,15 +71,20 @@ async def polling_mode():
         rating.router,
         admin_actions.router,
     )
+    logging.info("Bot lokal polling rejimida ishga tushdi...")
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
+    import sys
     if not BOT_TOKEN:
         logging.error("XATOLIK: BOT_TOKEN aniqlanmadi! Server Environment variables bo'limiga BOT_TOKEN qo'shing.")
         raise SystemExit("BOT_TOKEN is required!")
 
-    if WEBHOOK_HOST or os.environ.get("PORT"):
+    if "--polling" in sys.argv or os.environ.get("MODE") == "polling":
+        # Lokal polling rejimi
+        asyncio.run(polling_mode())
+    elif WEBHOOK_HOST or os.environ.get("PORT"):
         # Server rejimi — webhook / web server
         app = create_app()
         web.run_app(app, host="0.0.0.0", port=PORT)

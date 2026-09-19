@@ -46,5 +46,55 @@ async def rating():
         rows = result.all()
         return [{"name": u.full_name, "faculty": u.faculty, "group": u.group_name, "score": score} for u, score in rows]
 
+@app.get("/admin/sessions")
+async def list_sessions():
+    async with async_session() as session:
+        q = select(TestSession, User, Test).join(
+            User, TestSession.user_id == User.id
+        ).join(
+            Test, TestSession.test_id == Test.id
+        ).where(
+            TestSession.status == "completed"
+        ).order_by(TestSession.completed_at.desc()).limit(100)
+        result = await session.execute(q)
+        rows = result.all()
+        return [
+            {
+                "session_id": ts.id,
+                "student_name": u.full_name,
+                "faculty": u.faculty,
+                "group": u.group_name,
+                "test_title": t.title,
+                "score": ts.score,
+                "total": ts.total,
+                "completed_at": ts.completed_at.isoformat() if ts.completed_at else None
+            }
+            for ts, u, t in rows
+        ]
+
+@app.get("/admin/tests/{test_id}/participants")
+async def list_test_participants(test_id: int):
+    async with async_session() as session:
+        q = select(TestSession, User).join(
+            User, TestSession.user_id == User.id
+        ).where(
+            TestSession.test_id == test_id,
+            TestSession.status == "completed"
+        ).order_by(TestSession.completed_at.desc())
+        result = await session.execute(q)
+        rows = result.all()
+        return [
+            {
+                "session_id": ts.id,
+                "student_name": u.full_name,
+                "faculty": u.faculty,
+                "group": u.group_name,
+                "score": ts.score,
+                "total": ts.total,
+                "completed_at": ts.completed_at.isoformat() if ts.completed_at else None
+            }
+            for ts, u in rows
+        ]
+
 if __name__ == "__main__":
     uvicorn.run("admin_app:app", host="0.0.0.0", port=8000, reload=True)
