@@ -15,12 +15,12 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     user = await get_user(message.from_user.id)
 
-    # Agar foydalanuvchi Admin bo'lsa — faqat Admin Panel chiqadi!
+    # Admin tekshiruvi: ID, role yoki ism bo'yicha
     is_admin_flag = is_admin(message.from_user.id) or (user and (user.role == "admin" or "durdona" in user.full_name.lower()))
     if is_admin_flag:
         admin_name = user.full_name if user else "Admin"
         await message.answer(
-            f"👋 Assalomu alaykum, <b>{admin_name}</b> (Boshqaruvchi)!\n\n"
+            f"👋 Assalomu alaykum, <b>{admin_name}</b>!\n\n"
             "👨‍💼 <b>Admin boshqaruv paneli</b>\n"
             "Quyidagi menyudan kerakli bo'limni tanlang 👇",
             reply_markup=admin_menu()
@@ -80,12 +80,22 @@ async def get_group(message: Message, state: FSMContext):
         group_name=group
     )
     await state.clear()
-    is_admin = (message.from_user.id == ADMIN_ID)
-    await message.answer(
-        f"🎉 Ro'yxatdan muvaffaqiyatli o'tdingiz!\n\n"
-        f"👤 Ism: <b>{user.full_name}</b>\n"
-        f"🏛️ Fakultet: <b>{user.faculty}</b>\n"
-        f"👥 Guruh: <b>{user.group_name}</b>\n\n"
-        "Endi testlardan foydalanishingiz mumkin! ⬇️",
-        reply_markup=main_menu(is_admin=is_admin)
-    )
+    
+    is_admin_flag = is_admin(message.from_user.id) or (user and (user.role == "admin" or "durdona" in user.full_name.lower()))
+    if is_admin_flag:
+        await message.answer(
+            f"🎉 Admin sifatida ro'yxatdan o'tdingiz!\n\n"
+            f"👤 Ism: <b>{user.full_name}</b>\n\n"
+            "👨‍💼 <b>Admin boshqaruv paneli</b>",
+            reply_markup=admin_menu()
+        )
+    else:
+        await message.answer(
+            f"🎉 Ro'yxatdan muvaffaqiyatli o'tdingiz!\n\n"
+            f"👤 Ism: <b>{user.full_name}</b>\n"
+            f"🏛️ Fakultet: <b>{user.faculty}</b>\n"
+            f"👥 Guruh: <b>{user.group_name}</b>\n\n"
+            "Endi testlardan foydalanishingiz mumkin! ⬇️",
+            reply_markup=main_menu()
+        )
+
